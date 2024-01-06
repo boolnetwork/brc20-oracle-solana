@@ -9,6 +9,9 @@ use solana_program::account_info::next_account_info;
 use solana_program::program::invoke_signed;
 use solana_program::rent::Rent;
 use solana_program::sysvar::Sysvar;
+use solana_program::ed25519_program::ID as ED25519_ID;
+use solana_program::instruction::Instruction;
+use solana_program::sysvar::instructions::load_instruction_at_checked;
 use types::*;
 use error::Brc20OracleError;
 
@@ -27,7 +30,7 @@ pub fn process_instruction(
     match instruction {
         Brc20OracleInstruction::SetCommittee(committee) => set_committee(program_id, accounts, committee),
         Brc20OracleInstruction::Request(key) => request(program_id, accounts, key),
-        Brc20OracleInstruction::Insert(key, amount) => insert(program_id, accounts, key, amount),
+        Brc20OracleInstruction::Insert(key, amount, signature) => insert(program_id, accounts, key, amount, signature),
     }
 }
 
@@ -125,11 +128,13 @@ pub fn insert(
     accounts: &[AccountInfo],
     key: Brc20Key,
     amount: u128,
+    signature: Vec<u8>,
 ) -> ProgramResult {
     let account_info_iter = &mut accounts.iter();
-    let payer_info = next_account_info(account_info_iter)?;
     let committee_info = next_account_info(account_info_iter)?;
     let brc20_asset_info = next_account_info(account_info_iter)?;
+    let ix_sysvar_info = next_account_info(account_info_iter)?;
+
     // check committee info's correctness.
     if committee_info.owner != program_id {
         return Err(Brc20OracleError::NotOwnedByBrc20Oracle.into());
@@ -137,14 +142,6 @@ pub fn insert(
     let (committee_info_address, _) = Pubkey::find_program_address(&[COMMITTEE_PREFIX], program_id);
     if &committee_info_address != committee_info.key {
         return Err(Brc20OracleError::IncorrectCommitteePDA.into());
-    }
-    // ensure that payer is committee.
-    if !payer_info.is_signer {
-        return Err(Brc20OracleError::PayerNotSigner.into());
-    }
-    let committee = Pubkey::try_from_slice(&committee_info.data.borrow())?;
-    if payer_info.key != &committee {
-        return Err(Brc20OracleError::PayerNotCommittee.into());
     }
     // check corresponding amount address's correctness.
     let (asset_address, _) = Pubkey::find_program_address(
@@ -154,19 +151,85 @@ pub fn insert(
     if &asset_address != brc20_asset_info.key {
         return Err(Brc20OracleError::IncorrectAssetPDA.into());
     }
-    // check corresponding amount's owner and if it's initialized.
+    // check corresponding amount's owner.
     if brc20_asset_info.owner != program_id {
         return Err(Brc20OracleError::NotOwnedByBrc20Oracle.into());
     }
+
+    // check committee's signature.
+    let committee = Pubkey::try_from_slice(&committee_info.data.borrow())?;
+    let new_asset = Brc20Asset { key, amount };
+    let ix: Instruction = load_instruction_at_checked(0, ix_sysvar_info)?;
+    verify_ed25519_ix(&ix, committee.as_ref(), &new_asset.try_to_vec()?, &signature)?;
+
+    // update if initialized.
     let asset = Brc20Asset::try_from_slice(&brc20_asset_info.data.borrow()) ;
     match asset {
         Ok(_) => {
-            let new_asset = Brc20Asset { key, amount };
             new_asset.serialize(&mut &mut brc20_asset_info.data.borrow_mut()[..])?;
             msg!("update asset: {:?}", new_asset);
         },
         Err(_) => return Err(Brc20OracleError::RequestNotInitialized.into())
     }
 
+    Ok(())
+}
+
+pub fn verify_ed25519_ix(ix: &Instruction, pubkey: &[u8], msg: &[u8], sig: &[u8]) -> ProgramResult {
+    if ix.program_id       != ED25519_ID                   ||  // The program id we expect
+        !ix.accounts.is_empty()                            ||  // With no context accounts
+        ix.data.len()       != (16 + 64 + 32 + msg.len())      // And data of this size
+    {
+        return Err(Brc20OracleError::InvalidSigner.into());
+    }
+    check_ed25519_data(&ix.data, pubkey, msg, sig)?; // If that's not the case, check data
+    Ok(())
+}
+
+pub fn check_ed25519_data(data: &[u8], pubkey: &[u8], msg: &[u8], sig: &[u8]) -> ProgramResult {
+    // According to this layout used by the Ed25519Program
+    // https://github.com/solana-labs/solana-web3.js/blob/master/src/ed25519-program.ts#L33
+
+    // "Deserializing" byte slices
+    let num_signatures = &[data[0]]; // Byte  0
+    let padding = &[data[1]]; // Byte  1
+    let signature_offset = &data[2..=3]; // Bytes 2,3
+    let signature_instruction_index = &data[4..=5]; // Bytes 4,5
+    let public_key_offset = &data[6..=7]; // Bytes 6,7
+    let public_key_instruction_index = &data[8..=9]; // Bytes 8,9
+    let message_data_offset = &data[10..=11]; // Bytes 10,11
+    let message_data_size = &data[12..=13]; // Bytes 12,13
+    let message_instruction_index = &data[14..=15]; // Bytes 14,15
+
+    let data_pubkey = &data[16..16 + 32]; // Bytes 16..16+32
+    let data_sig = &data[48..48 + 64]; // Bytes 48..48+64
+    let data_msg = &data[112..]; // Bytes 112..end
+
+    // Expected values
+    let exp_public_key_offset: u16 = 16; // 2*u8 + 7*u16
+    let exp_signature_offset: u16 = exp_public_key_offset + pubkey.len() as u16;
+    let exp_message_data_offset: u16 = exp_signature_offset + sig.len() as u16;
+    let exp_num_signatures: u8 = 1;
+    let exp_message_data_size: u16 = msg.len().try_into().unwrap();
+
+    // Header and Arg Checks
+    // Header
+    if num_signatures != &exp_num_signatures.to_le_bytes()
+        || padding != &[0]
+        || signature_offset != &exp_signature_offset.to_le_bytes()
+        || signature_instruction_index != &u16::MAX.to_le_bytes()
+        || public_key_offset != &exp_public_key_offset.to_le_bytes()
+        || public_key_instruction_index != &u16::MAX.to_le_bytes()
+        || message_data_offset != &exp_message_data_offset.to_le_bytes()
+        || message_data_size != &exp_message_data_size.to_le_bytes()
+        || message_instruction_index != &u16::MAX.to_le_bytes()
+    {
+        return Err(Brc20OracleError::InvalidSigner.into());
+    }
+
+    // Arguments
+    if data_pubkey != pubkey || data_msg != msg || data_sig != sig {
+        return Err(Brc20OracleError::InvalidSigner.into());
+    }
     Ok(())
 }

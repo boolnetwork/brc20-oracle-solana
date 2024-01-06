@@ -3,7 +3,8 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program_test::*;
 use solana_program::instruction::{AccountMeta, Instruction};
 use solana_program::pubkey::Pubkey;
-use solana_program::{system_instruction, system_program};
+use solana_program::{system_instruction, system_program, sysvar};
+use solana_sdk::ed25519_instruction::new_ed25519_instruction;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
 use solana_sdk::signers::Signers;
@@ -110,6 +111,7 @@ pub async fn process_query(
 pub async fn process_insert(
     banks_client: &mut BanksClient,
     payer: &Keypair,
+    committee: &Keypair,
     committee_info: Pubkey,
     key: Brc20Key,
     amount: u128,
@@ -120,18 +122,25 @@ pub async fn process_insert(
         Pubkey::find_program_address(&[ASSET_PREFIX, key.try_to_vec().unwrap().as_slice()], &program_id);
 
     let accounts = vec![
-        AccountMeta::new(payer.pubkey(), true),
         AccountMeta::new_readonly(committee_info.clone(), false),
         AccountMeta::new(asset_address, false),
+        AccountMeta::new_readonly(sysvar::instructions::id(), false),
     ];
+    let brc20_asset = Brc20Asset { key: key.clone(), amount };
+    let asset_msg = brc20_asset.try_to_vec().unwrap();
+    let signature = committee.sign_message(&asset_msg).as_ref().to_vec();
+    let data = Brc20OracleInstruction::Insert(key, amount, signature).try_to_vec().unwrap();
 
-    let data = Brc20OracleInstruction::Insert(key, amount).try_to_vec().unwrap();
+    let verify_instruction = new_ed25519_instruction(
+        &ed25519_dalek::Keypair::from_bytes(&committee.to_bytes()).unwrap(),
+        &asset_msg,
+    );
     let instruction = Instruction {
         program_id,
         accounts,
         data,
     };
-    process(banks_client, payer, &[payer], &[instruction]).await.unwrap();
+    process(banks_client, payer, &[payer], &[verify_instruction, instruction]).await.unwrap();
     asset_address
 }
 
@@ -165,13 +174,27 @@ async fn test_brc20_oracle() {
 
     // insert brc20 amount
     let mut amount = 1000;
-    let asset_address = process_insert(&mut banks_client, &new_committee_pair, committee_info_address, key.clone(), amount).await;
+    let asset_address = process_insert(
+        &mut banks_client,
+        &payer,
+        &new_committee_pair,
+        committee_info_address,
+        key.clone(),
+        amount
+    ).await;
     let asset: Brc20Asset = query_data(&mut banks_client, asset_address).await;
     assert_eq!(amount, asset.amount);
 
     // update brc20 amount
     amount = 2000;
-    let asset_address = process_insert(&mut banks_client, &new_committee_pair, committee_info_address, key, amount).await;
+    let asset_address = process_insert(
+        &mut banks_client,
+        &payer,
+        &new_committee_pair,
+        committee_info_address,
+        key,
+        amount
+    ).await;
     let asset: Brc20Asset = query_data(&mut banks_client, asset_address).await;
     assert_eq!(amount, asset.amount);
 }

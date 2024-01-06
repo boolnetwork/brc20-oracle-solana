@@ -596,6 +596,7 @@ version = "0.1.0"
 dependencies = [
  "borsh 0.10.3",
  "borsh-derive 0.10.3",
+ "ed25519-dalek",
  "num-derive 0.4.1",
  "num-traits",
  "solana-program",

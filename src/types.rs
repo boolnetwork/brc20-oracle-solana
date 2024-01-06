@@ -5,7 +5,7 @@ use solana_program::pubkey::Pubkey;
 pub enum Brc20OracleInstruction {
     SetCommittee(Pubkey),
     Request(Brc20Key),
-    Insert(Brc20Key, u128),
+    Insert(Brc20Key, u128, Vec<u8>),
 }
 
 #[derive(BorshSerialize, BorshDeserialize, Clone, Debug, Eq, PartialEq)]
