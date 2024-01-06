@@ -23,8 +23,8 @@ pub struct Brc20Asset {
 
 ## Consts
 ```Rust
-const COMMITTEE_PREFIX: &[u8] = b"Brc20OracleCommittee";
-const ASSET_PREFIX: &[u8] = b"Brc20OracleAsset";
+const COMMITTEE_PREFIX: &[u8] = b"Committee";
+const ASSET_PREFIX: &[u8] = b"Asset";
 ```
 
 ## Storages
