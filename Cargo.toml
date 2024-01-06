@@ -1,12 +1,16 @@
-[package]
-name = "brc20-oracle"
-version = "0.1.0"
+[workspace.package]
+authors = ["BoolNetwork"]
 edition = "2021"
+version = "0.1.0"
 
-[lib]
-crate-type = ["cdylib", "lib"]
+[workspace]
+resolver = "2"
 
-[dependencies]
+members = [
+    "./contracts/brc20-oracle",
+]
+
+[workspace.dependencies]
 borsh = "0.10.3"
 borsh-derive = "0.10.3"
 solana-program = "1.17.14"
@@ -14,10 +18,7 @@ thiserror = "1.0"
 num-derive = "0.4.0"
 num-traits = "0.2.16"
 
-[dev-dependencies]
+# dev dependencies
 ed25519-dalek = "1.0.1"
 solana-sdk = "1.17.14"
 solana-program-test = "1.17.14"
-
-[features]
-no-entrypoint = []

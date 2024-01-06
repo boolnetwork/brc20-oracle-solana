@@ -66,7 +66,7 @@ pub async fn process_init_committee(
     let program_id = Pubkey::from_str(PROGRAM_ID).unwrap();
 
     let (committee_info_address, _) =
-        Pubkey::find_program_address(&[COMMITTEE_PREFIX], &program_id);
+        Pubkey::find_program_address(&[&COMMITTEE_PREFIX], &program_id);
 
     let accounts = vec![
         AccountMeta::new(payer.pubkey(), true),
@@ -92,7 +92,7 @@ pub async fn process_query(
     let program_id = Pubkey::from_str(PROGRAM_ID).unwrap();
 
     let (asset_address, _) =
-        Pubkey::find_program_address(&[ASSET_PREFIX, key.try_to_vec().unwrap().as_slice()], &program_id);
+        Pubkey::find_program_address(&[&ASSET_PREFIX, key.try_to_vec().unwrap().as_slice()], &program_id);
     let accounts = vec![
         AccountMeta::new(payer.pubkey(), true),
         AccountMeta::new(asset_address, false),
@@ -119,14 +119,14 @@ pub async fn process_insert(
     let program_id = Pubkey::from_str(PROGRAM_ID).unwrap();
 
     let (asset_address, _) =
-        Pubkey::find_program_address(&[ASSET_PREFIX, key.try_to_vec().unwrap().as_slice()], &program_id);
+        Pubkey::find_program_address(&[&ASSET_PREFIX, key.try_to_vec().unwrap().as_slice()], &program_id);
 
     let accounts = vec![
         AccountMeta::new_readonly(committee_info.clone(), false),
         AccountMeta::new(asset_address, false),
         AccountMeta::new_readonly(sysvar::instructions::id(), false),
     ];
-    let brc20_asset = Brc20Asset { key: key.clone(), amount };
+    let brc20_asset = Brc20Asset { prefix: ASSET_PREFIX, key: key.clone(), amount };
     let asset_msg = brc20_asset.try_to_vec().unwrap();
     let signature = committee.sign_message(&asset_msg).as_ref().to_vec();
     let data = Brc20OracleInstruction::Insert(key, amount, signature).try_to_vec().unwrap();

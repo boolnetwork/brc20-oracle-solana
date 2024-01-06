@@ -17,6 +17,8 @@ pub struct Brc20Key {
 
 #[derive(BorshSerialize, BorshDeserialize, Clone, Debug, Eq, PartialEq)]
 pub struct Brc20Asset {
+    // To filter this account easily by client, we set same prefix.
+    pub prefix: [u8; 5],
     pub key: Brc20Key,
     pub amount: u128,
 }

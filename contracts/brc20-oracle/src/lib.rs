@@ -18,8 +18,8 @@ use error::Brc20OracleError;
 #[cfg(not(feature = "no-entrypoint"))]
 solana_program::entrypoint!(process_instruction);
 
-const COMMITTEE_PREFIX: &[u8] = b"Brc20OracleCommittee";
-const ASSET_PREFIX: &[u8] = b"Brc20OracleAsset";
+const COMMITTEE_PREFIX: [u8; 9] = *b"Committee";
+const ASSET_PREFIX: [u8; 5] = *b"Asset";
 
 pub fn process_instruction(
     program_id: &Pubkey,
@@ -45,7 +45,7 @@ pub fn set_committee(
     let system_program = next_account_info(account_info_iter)?;
 
     let (committee_address, bump) = Pubkey::find_program_address(
-        &[COMMITTEE_PREFIX],
+        &[&COMMITTEE_PREFIX],
         program_id,
     );
     if committee_info.key != &committee_address {
@@ -72,7 +72,7 @@ pub fn set_committee(
                     program_id,
                 ),
                 &[payer_info.clone(), committee_info.clone(), system_program.clone()],
-                &[&[COMMITTEE_PREFIX, &[bump]]],
+                &[&[&COMMITTEE_PREFIX, &[bump]]],
             )?;
         }
     }
@@ -93,7 +93,7 @@ pub fn request(
 
     // initialize corresponding asset account rents.
     let (asset_address, bump) = Pubkey::find_program_address(
-        &[ASSET_PREFIX, key.try_to_vec()?.as_slice()],
+        &[&ASSET_PREFIX, key.try_to_vec()?.as_slice()],
         program_id,
     );
     if &asset_address != brc20_asset_info.key {
@@ -103,7 +103,7 @@ pub fn request(
     match parse_amount {
         Ok(_) => return Err(Brc20OracleError::DuplicateRequest.into()),
         Err(_) => {
-            let asset = Brc20Asset { key: key.clone(), amount: 0 };
+            let asset = Brc20Asset { prefix: ASSET_PREFIX, key: key.clone(), amount: 0 };
             let size = asset.try_to_vec()?.len();
             invoke_signed(
                 &system_instruction::create_account(
@@ -114,7 +114,7 @@ pub fn request(
                     program_id,
                 ),
                 &[payer_info.clone(), brc20_asset_info.clone(), system_program.clone()],
-                &[&[ASSET_PREFIX, key.try_to_vec()?.as_slice(), &[bump]]],
+                &[&[&ASSET_PREFIX, key.try_to_vec()?.as_slice(), &[bump]]],
             )?;
             asset.serialize(&mut &mut brc20_asset_info.data.borrow_mut()[..])?;
             msg!("new request for key: {:?}", key);
@@ -139,13 +139,13 @@ pub fn insert(
     if committee_info.owner != program_id {
         return Err(Brc20OracleError::NotOwnedByBrc20Oracle.into());
     }
-    let (committee_info_address, _) = Pubkey::find_program_address(&[COMMITTEE_PREFIX], program_id);
+    let (committee_info_address, _) = Pubkey::find_program_address(&[&COMMITTEE_PREFIX], program_id);
     if &committee_info_address != committee_info.key {
         return Err(Brc20OracleError::IncorrectCommitteePDA.into());
     }
     // check corresponding amount address's correctness.
     let (asset_address, _) = Pubkey::find_program_address(
-        &[ASSET_PREFIX, key.try_to_vec()?.as_slice()],
+        &[&ASSET_PREFIX, key.try_to_vec()?.as_slice()],
         program_id,
     );
     if &asset_address != brc20_asset_info.key {
@@ -158,7 +158,7 @@ pub fn insert(
 
     // check committee's signature.
     let committee = Pubkey::try_from_slice(&committee_info.data.borrow())?;
-    let new_asset = Brc20Asset { key, amount };
+    let new_asset = Brc20Asset { prefix: ASSET_PREFIX, key, amount };
     let ix: Instruction = load_instruction_at_checked(0, ix_sysvar_info)?;
     verify_ed25519_ix(&ix, committee.as_ref(), &new_asset.try_to_vec()?, &signature)?;
 
