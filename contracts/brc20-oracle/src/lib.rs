@@ -28,7 +28,7 @@ pub fn process_instruction(
 ) -> ProgramResult {
     let instruction = Brc20OracleInstruction::try_from_slice(instruction_data)?;
     match instruction {
-        Brc20OracleInstruction::SetCommittee(committee) => set_committee(program_id, accounts, committee),
+        Brc20OracleInstruction::SetCommittee(committee, signature) => set_committee(program_id, accounts, committee, signature),
         Brc20OracleInstruction::Request(key) => request(program_id, accounts, key),
         Brc20OracleInstruction::Insert(key, amount, signature) => insert(program_id, accounts, key, amount, signature),
     }
@@ -37,12 +37,14 @@ pub fn process_instruction(
 pub fn set_committee(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
-    committee: Pubkey,
+    committee: Committee,
+    signature: Vec<u8>,
 ) -> ProgramResult {
     let account_info_iter = &mut accounts.iter();
     let payer_info = next_account_info(account_info_iter)?;
     let committee_info = next_account_info(account_info_iter)?;
     let system_program = next_account_info(account_info_iter)?;
+    let ix_sysvar_info = next_account_info(account_info_iter)?;
 
     let (committee_address, bump) = Pubkey::find_program_address(
         &[&COMMITTEE_PREFIX],
@@ -52,23 +54,29 @@ pub fn set_committee(
         return Err(Brc20OracleError::IncorrectCommitteePDA.into());
     }
 
-    let parse_committee = Pubkey::try_from_slice(&committee_info.data.borrow());
+    let parse_committee = Committee::try_from_slice(&committee_info.data.borrow());
     match parse_committee {
         Ok(brc20_committee) => {
-            if &brc20_committee != payer_info.key {
-                return Err(Brc20OracleError::NotSignedByCommittee.into());
-            }
             if committee_info.owner != program_id {
                 return Err(Brc20OracleError::NotOwnedByBrc20Oracle.into());
             }
+            if committee.id != brc20_committee.id + 1 {
+                return Err(Brc20OracleError::IncorrectCommitteeId.into());
+            }
+            let ix: Instruction = load_instruction_at_checked(0, ix_sysvar_info)?;
+            verify_ed25519_ix(&ix, brc20_committee.address.as_ref(), &committee.try_to_vec()?, &signature)?;
         }
         Err(_) => {
+            if committee.id != 0 {
+                return Err(Brc20OracleError::IncorrectCommitteeId.into());
+            }
+            let size = committee.try_to_vec()?.len();
             invoke_signed(
                 &system_instruction::create_account(
                     payer_info.key,
                     &committee_info.key,
-                    Rent::get()?.minimum_balance(32),
-                    32,
+                    Rent::get()?.minimum_balance(size),
+                    size as u64,
                     program_id,
                 ),
                 &[payer_info.clone(), committee_info.clone(), system_program.clone()],
@@ -157,13 +165,13 @@ pub fn insert(
     }
 
     // check committee's signature.
-    let committee = Pubkey::try_from_slice(&committee_info.data.borrow())?;
+    let committee = Committee::try_from_slice(&committee_info.data.borrow())?;
     let new_asset = Brc20Asset { prefix: ASSET_PREFIX, key, amount };
     let ix: Instruction = load_instruction_at_checked(0, ix_sysvar_info)?;
-    verify_ed25519_ix(&ix, committee.as_ref(), &new_asset.try_to_vec()?, &signature)?;
+    verify_ed25519_ix(&ix, committee.address.as_ref(), &new_asset.try_to_vec()?, &signature)?;
 
     // update if initialized.
-    let asset = Brc20Asset::try_from_slice(&brc20_asset_info.data.borrow()) ;
+    let asset = Brc20Asset::try_from_slice(&brc20_asset_info.data.borrow());
     match asset {
         Ok(_) => {
             new_asset.serialize(&mut &mut brc20_asset_info.data.borrow_mut()[..])?;

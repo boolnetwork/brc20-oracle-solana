@@ -9,7 +9,7 @@ use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
 use solana_sdk::signers::Signers;
 use solana_sdk::transaction::Transaction;
-use crate::types::{Brc20Asset, Brc20Key, Brc20OracleInstruction};
+use crate::types::{Brc20Asset, Brc20Key, Brc20OracleInstruction, Committee};
 use crate::{COMMITTEE_PREFIX, ASSET_PREFIX};
 
 const PROGRAM_ID: &str = "1111111QLbz7JHiBTspS962RLKV8GndWFwiEaqKM";
@@ -35,16 +35,6 @@ pub async fn query_data<T: BorshDeserialize>(
     T::try_from_slice(&account.data).unwrap()
 }
 
-pub async fn transfer(
-    client: &mut BanksClient,
-    payer: &Keypair,
-    recipient: &Pubkey,
-    lamports: u64
-) -> Result<(), BanksClientError> {
-    let instruction = system_instruction::transfer(&payer.pubkey(), recipient, lamports);
-    process(client, payer, &[payer], &[instruction]).await
-}
-
 pub async fn init_client() -> (BanksClient, Keypair) {
     let mut program_test = ProgramTest::default();
     let program_id = Pubkey::from_str(PROGRAM_ID).unwrap();
@@ -61,7 +51,9 @@ pub async fn init_client() -> (BanksClient, Keypair) {
 pub async fn process_init_committee(
     banks_client: &mut BanksClient,
     payer: &Keypair,
-    committee: Pubkey,
+    old_committee: &Keypair,
+    new_committee: &Pubkey,
+    id: u8,
 ) -> Pubkey {
     let program_id = Pubkey::from_str(PROGRAM_ID).unwrap();
 
@@ -72,15 +64,24 @@ pub async fn process_init_committee(
         AccountMeta::new(payer.pubkey(), true),
         AccountMeta::new(committee_info_address.clone(), false),
         AccountMeta::new_readonly(system_program::id(), false),
+        AccountMeta::new_readonly(sysvar::instructions::id(), false),
     ];
 
-    let data = Brc20OracleInstruction::SetCommittee(committee).try_to_vec().unwrap();
+    let new_committee = Committee { id, address: *new_committee };
+    let sign_msg = new_committee.try_to_vec().unwrap();
+
+    let verify_instruction = new_ed25519_instruction(
+        &ed25519_dalek::Keypair::from_bytes(&old_committee.to_bytes()).unwrap(),
+        &sign_msg,
+    );
+    let signature = old_committee.sign_message(&sign_msg).as_ref().to_vec();
+    let data = Brc20OracleInstruction::SetCommittee(new_committee, signature).try_to_vec().unwrap();
     let instruction = Instruction {
         program_id,
         accounts,
         data,
     };
-    process(banks_client, payer, &[payer], &[instruction]).await.unwrap();
+    process(banks_client, payer, &[payer], &[verify_instruction, instruction]).await.unwrap();
     committee_info_address
 }
 
@@ -108,6 +109,7 @@ pub async fn process_query(
     process(banks_client, payer, &[payer], &[instruction]).await.unwrap();
     asset_address
 }
+
 pub async fn process_insert(
     banks_client: &mut BanksClient,
     payer: &Keypair,
@@ -150,20 +152,18 @@ async fn test_brc20_oracle() {
     println!("payer: {:?}", payer.pubkey());
     let init_committee_pair = Keypair::new();
     let new_committee_pair = Keypair::new();
-    transfer(&mut banks_client, &payer, &init_committee_pair.pubkey(), 1000000000).await.unwrap();
-    transfer(&mut banks_client, &payer, &new_committee_pair.pubkey(), 1000000000).await.unwrap();
-    assert_eq!(banks_client.get_balance(init_committee_pair.pubkey()).await.unwrap(), 1000000000);
-    assert_eq!(banks_client.get_balance(new_committee_pair.pubkey()).await.unwrap(), 1000000000);
 
     // initialize committee
-    let committee_info_address = process_init_committee(&mut banks_client, &payer, init_committee_pair.pubkey()).await;
-    let committee: Pubkey = query_data(&mut banks_client, committee_info_address).await;
-    assert_eq!(committee, init_committee_pair.pubkey());
+    let committee_info_address = process_init_committee(&mut banks_client, &payer, &init_committee_pair, &init_committee_pair.pubkey(), 0).await;
+    let committee: Committee = query_data(&mut banks_client, committee_info_address).await;
+    assert_eq!(committee.id, 0);
+    assert_eq!(committee.address, init_committee_pair.pubkey());
 
     // change committee
-    let committee_info_address = process_init_committee(&mut banks_client, &init_committee_pair, new_committee_pair.pubkey()).await;
-    let committee: Pubkey = query_data(&mut banks_client, committee_info_address).await;
-    assert_eq!(committee, new_committee_pair.pubkey());
+    let committee_info_address = process_init_committee(&mut banks_client, &payer, &init_committee_pair, &new_committee_pair.pubkey(), 1).await;
+    let committee: Committee = query_data(&mut banks_client, committee_info_address).await;
+    assert_eq!(committee.id, 1);
+    assert_eq!(committee.address, new_committee_pair.pubkey());
 
     // query brc20 amount
     let key = Brc20Key { height: 1, tick: [1, 2, 3, 4], owner: "12345".to_string() };

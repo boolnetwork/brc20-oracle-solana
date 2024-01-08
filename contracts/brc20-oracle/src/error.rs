@@ -26,6 +26,8 @@ pub enum Brc20OracleError {
     PayerNotCommittee,
     #[error("Signature check error")]
     InvalidSigner,
+    #[error("Incorrect id to update committee ")]
+    IncorrectCommitteeId,
 }
 
 impl From<Brc20OracleError> for ProgramError {
