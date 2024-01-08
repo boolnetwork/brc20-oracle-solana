@@ -3,7 +3,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program_test::*;
 use solana_program::instruction::{AccountMeta, Instruction};
 use solana_program::pubkey::Pubkey;
-use solana_program::{system_instruction, system_program, sysvar};
+use solana_program::{system_program, sysvar};
 use solana_sdk::ed25519_instruction::new_ed25519_instruction;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;

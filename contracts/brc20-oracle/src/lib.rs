@@ -165,7 +165,10 @@ pub fn insert(
     }
 
     // check committee's signature.
-    let committee = Committee::try_from_slice(&committee_info.data.borrow())?;
+    let committee = match Committee::try_from_slice(&committee_info.data.borrow()) {
+        Ok(committee) => committee,
+        Err(_) => return Err(Brc20OracleError::CommitteeNotSet.into()),
+    };
     let new_asset = Brc20Asset { prefix: ASSET_PREFIX, key, amount };
     let ix: Instruction = load_instruction_at_checked(0, ix_sysvar_info)?;
     verify_ed25519_ix(&ix, committee.address.as_ref(), &new_asset.try_to_vec()?, &signature)?;
