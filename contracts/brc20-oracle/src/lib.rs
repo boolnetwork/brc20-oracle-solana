@@ -37,7 +37,7 @@ pub fn process_instruction(
 pub fn set_committee(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
-    committee: Committee,
+    mut committee: Committee,
     signature: Vec<u8>,
 ) -> ProgramResult {
     let account_info_iter = &mut accounts.iter();
@@ -65,6 +65,7 @@ pub fn set_committee(
             }
             let ix: Instruction = load_instruction_at_checked(0, ix_sysvar_info)?;
             verify_ed25519_ix(&ix, brc20_committee.address.as_ref(), &committee.try_to_vec()?, &signature)?;
+            committee.uid = brc20_committee.uid;
         }
         Err(_) => {
             if committee.id != 0 {
@@ -96,8 +97,21 @@ pub fn request(
 ) -> ProgramResult {
     let account_info_iter = &mut accounts.iter();
     let payer_info = next_account_info(account_info_iter)?;
+    let committee_info = next_account_info(account_info_iter)?;
     let brc20_asset_info = next_account_info(account_info_iter)?;
     let system_program = next_account_info(account_info_iter)?;
+
+    let (committee_address, _) = Pubkey::find_program_address(
+        &[&COMMITTEE_PREFIX],
+        program_id,
+    );
+    if committee_info.key != &committee_address {
+        return Err(Brc20OracleError::IncorrectCommitteePDA.into());
+    }
+    let mut committee = match Committee::try_from_slice(&committee_info.data.borrow()) {
+        Ok(committee) => committee,
+        Err(_) => return Err(Brc20OracleError::CommitteeNotSet.into()),
+    };
 
     // initialize corresponding asset account rents.
     let (asset_address, bump) = Pubkey::find_program_address(
@@ -111,7 +125,8 @@ pub fn request(
     match parse_amount {
         Ok(_) => return Err(Brc20OracleError::DuplicateRequest.into()),
         Err(_) => {
-            let asset = Brc20Asset { prefix: ASSET_PREFIX, key: key.clone(), amount: 0 };
+            let asset = Brc20Asset { prefix: ASSET_PREFIX, uid: committee.uid, set: false, key: key.clone(), amount: 0 };
+            committee.uid += 1;
             let size = asset.try_to_vec()?.len();
             invoke_signed(
                 &system_instruction::create_account(
@@ -125,6 +140,7 @@ pub fn request(
                 &[&[&ASSET_PREFIX, key.try_to_vec()?.as_slice(), &[bump]]],
             )?;
             asset.serialize(&mut &mut brc20_asset_info.data.borrow_mut()[..])?;
+            committee.serialize(&mut &mut committee_info.data.borrow_mut()[..])?;
             msg!("new request for key: {:?}", key);
         }
     }
@@ -164,21 +180,22 @@ pub fn insert(
         return Err(Brc20OracleError::NotOwnedByBrc20Oracle.into());
     }
 
-    // check committee's signature.
-    let committee = match Committee::try_from_slice(&committee_info.data.borrow()) {
-        Ok(committee) => committee,
-        Err(_) => return Err(Brc20OracleError::CommitteeNotSet.into()),
-    };
-    let new_asset = Brc20Asset { prefix: ASSET_PREFIX, key, amount };
-    let ix: Instruction = load_instruction_at_checked(0, ix_sysvar_info)?;
-    verify_ed25519_ix(&ix, committee.address.as_ref(), &new_asset.try_to_vec()?, &signature)?;
-
-    // update if initialized.
     let asset = Brc20Asset::try_from_slice(&brc20_asset_info.data.borrow());
     match asset {
-        Ok(_) => {
-            new_asset.serialize(&mut &mut brc20_asset_info.data.borrow_mut()[..])?;
-            msg!("update asset: {:?}", new_asset);
+        Ok(mut asset) => {
+            if asset.set {
+                return Err(Brc20OracleError::DuplicateInsert.into());
+            }
+            asset.amount = amount;
+            asset.set = true;
+            let committee = match Committee::try_from_slice(&committee_info.data.borrow()) {
+                Ok(committee) => committee,
+                Err(_) => return Err(Brc20OracleError::CommitteeNotSet.into()),
+            };
+            let ix: Instruction = load_instruction_at_checked(0, ix_sysvar_info)?;
+            verify_ed25519_ix(&ix, committee.address.as_ref(), &asset.try_to_vec()?, &signature)?;
+            asset.serialize(&mut &mut brc20_asset_info.data.borrow_mut()[..])?;
+            msg!("insert asset: {:?}", asset);
         },
         Err(_) => return Err(Brc20OracleError::RequestNotInitialized.into())
     }

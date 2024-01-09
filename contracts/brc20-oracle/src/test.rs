@@ -67,7 +67,7 @@ pub async fn process_init_committee(
         AccountMeta::new_readonly(sysvar::instructions::id(), false),
     ];
 
-    let new_committee = Committee { id, address: *new_committee };
+    let new_committee = Committee { id, address: *new_committee, uid: 0 };
     let sign_msg = new_committee.try_to_vec().unwrap();
 
     let verify_instruction = new_ed25519_instruction(
@@ -92,10 +92,13 @@ pub async fn process_query(
 ) -> Pubkey {
     let program_id = Pubkey::from_str(PROGRAM_ID).unwrap();
 
+    let (committee_info_address, _) =
+        Pubkey::find_program_address(&[&COMMITTEE_PREFIX], &program_id);
     let (asset_address, _) =
         Pubkey::find_program_address(&[&ASSET_PREFIX, key.try_to_vec().unwrap().as_slice()], &program_id);
     let accounts = vec![
         AccountMeta::new(payer.pubkey(), true),
+        AccountMeta::new_readonly(committee_info_address, false),
         AccountMeta::new(asset_address, false),
         AccountMeta::new_readonly(system_program::id(), false),
     ];
@@ -115,6 +118,7 @@ pub async fn process_insert(
     payer: &Keypair,
     committee: &Keypair,
     committee_info: Pubkey,
+    uid: u64,
     key: Brc20Key,
     amount: u128,
 ) -> Pubkey {
@@ -128,8 +132,14 @@ pub async fn process_insert(
         AccountMeta::new(asset_address, false),
         AccountMeta::new_readonly(sysvar::instructions::id(), false),
     ];
-    let brc20_asset = Brc20Asset { prefix: ASSET_PREFIX, key: key.clone(), amount };
-    let asset_msg = brc20_asset.try_to_vec().unwrap();
+    let asset = Brc20Asset {
+        prefix: ASSET_PREFIX,
+        uid,
+        set: true,
+        key: key.clone(),
+        amount,
+    };
+    let asset_msg = asset.try_to_vec().unwrap();
     let signature = committee.sign_message(&asset_msg).as_ref().to_vec();
     let data = Brc20OracleInstruction::Insert(key, amount, signature).try_to_vec().unwrap();
 
@@ -171,30 +181,20 @@ async fn test_brc20_oracle() {
     let asset: Brc20Asset = query_data(&mut banks_client, asset_address).await;
     assert_eq!(key, asset.key);
     assert_eq!(0, asset.amount);
+    assert_eq!(0, asset.uid);
+    assert_eq!(false, asset.set);
 
     // insert brc20 amount
-    let mut amount = 1000;
     let asset_address = process_insert(
         &mut banks_client,
         &payer,
         &new_committee_pair,
         committee_info_address,
-        key.clone(),
-        amount
-    ).await;
-    let asset: Brc20Asset = query_data(&mut banks_client, asset_address).await;
-    assert_eq!(amount, asset.amount);
-
-    // update brc20 amount
-    amount = 2000;
-    let asset_address = process_insert(
-        &mut banks_client,
-        &payer,
-        &new_committee_pair,
-        committee_info_address,
+        0,
         key,
-        amount
+        1000,
     ).await;
     let asset: Brc20Asset = query_data(&mut banks_client, asset_address).await;
-    assert_eq!(amount, asset.amount);
+    assert_eq!(1000, asset.amount);
+    assert_eq!(true, asset.set);
 }

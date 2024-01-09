@@ -18,12 +18,10 @@ pub enum Brc20OracleError {
     NotOwnedByBrc20Oracle,
     #[error("Duplicate request for this data")]
     DuplicateRequest,
+    #[error("Duplicate insert for this data")]
+    DuplicateInsert,
     #[error("Brc20 request not initialized")]
     RequestNotInitialized,
-    #[error("Payer isn't signer")]
-    PayerNotSigner,
-    #[error("Payer isn't committee account")]
-    PayerNotCommittee,
     #[error("Signature check error")]
     InvalidSigner,
     #[error("Incorrect id to update committee")]
