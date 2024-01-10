@@ -28,9 +28,9 @@ pub struct Brc20Key {
 pub struct Brc20Asset {
     // To filter this account easily by client, we set same prefix.
     pub prefix: [u8; 5],
-    pub uid: u64,
     // if the asset is set.
     pub set: bool,
+    pub uid: u64,
     pub key: Brc20Key,
     pub amount: u128,
 }
