@@ -40,7 +40,7 @@ const ASSET_PREFIX: &[u8] = b"Asset";
 
 "Description": Actual data for specific brc20 asset.
 
-"AddressDerivation": key is struct [Brc20Key]. `Pubkey::find_program_address(&[ASSET_PREFIX, key.try_to_vec()?.as_slice()], program_id);`
+"AddressDerivation": key is struct [Brc20Key] and hash is Keccak256. `Pubkey::find_program_address(&[ASSET_PREFIX, hash(key.try_to_vec()?.as_slice()).as_ref()], program_id);`
 
 "DataType": [Brc20Assset].
 

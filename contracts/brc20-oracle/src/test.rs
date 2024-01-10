@@ -4,6 +4,7 @@ use solana_program_test::*;
 use solana_program::instruction::{AccountMeta, Instruction};
 use solana_program::pubkey::Pubkey;
 use solana_program::{system_program, sysvar};
+use solana_program::keccak::hash;
 use solana_sdk::ed25519_instruction::new_ed25519_instruction;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
@@ -95,7 +96,7 @@ pub async fn process_query(
     let (committee_info_address, _) =
         Pubkey::find_program_address(&[&COMMITTEE_PREFIX], &program_id);
     let (asset_address, _) =
-        Pubkey::find_program_address(&[&ASSET_PREFIX, key.try_to_vec().unwrap().as_slice()], &program_id);
+        Pubkey::find_program_address(&[&ASSET_PREFIX, hash(key.try_to_vec().unwrap().as_slice()).as_ref()], &program_id);
     let accounts = vec![
         AccountMeta::new(payer.pubkey(), true),
         AccountMeta::new_readonly(committee_info_address, false),
@@ -125,7 +126,7 @@ pub async fn process_insert(
     let program_id = Pubkey::from_str(PROGRAM_ID).unwrap();
 
     let (asset_address, _) =
-        Pubkey::find_program_address(&[&ASSET_PREFIX, key.try_to_vec().unwrap().as_slice()], &program_id);
+        Pubkey::find_program_address(&[&ASSET_PREFIX, hash(key.try_to_vec().unwrap().as_slice()).as_ref()], &program_id);
 
     let accounts = vec![
         AccountMeta::new_readonly(committee_info.clone(), false),

@@ -9,6 +9,7 @@ use solana_program::account_info::next_account_info;
 use solana_program::program::invoke_signed;
 use solana_program::rent::Rent;
 use solana_program::sysvar::Sysvar;
+use solana_program::keccak::hash;
 use solana_program::ed25519_program::ID as ED25519_ID;
 use solana_program::instruction::Instruction;
 use solana_program::sysvar::instructions::load_instruction_at_checked;
@@ -115,7 +116,7 @@ pub fn request(
 
     // initialize corresponding asset account rents.
     let (asset_address, bump) = Pubkey::find_program_address(
-        &[&ASSET_PREFIX, key.try_to_vec()?.as_slice()],
+        &[&ASSET_PREFIX, hash(key.try_to_vec()?.as_slice()).as_ref()],
         program_id,
     );
     if &asset_address != brc20_asset_info.key {
@@ -137,7 +138,7 @@ pub fn request(
                     program_id,
                 ),
                 &[payer_info.clone(), brc20_asset_info.clone(), system_program.clone()],
-                &[&[&ASSET_PREFIX, key.try_to_vec()?.as_slice(), &[bump]]],
+                &[&[&ASSET_PREFIX, hash(key.try_to_vec()?.as_slice()).as_ref(), &[bump]]],
             )?;
             asset.serialize(&mut &mut brc20_asset_info.data.borrow_mut()[..])?;
             committee.serialize(&mut &mut committee_info.data.borrow_mut()[..])?;
@@ -169,7 +170,7 @@ pub fn insert(
     }
     // check corresponding amount address's correctness.
     let (asset_address, _) = Pubkey::find_program_address(
-        &[&ASSET_PREFIX, key.try_to_vec()?.as_slice()],
+        &[&ASSET_PREFIX, hash(key.try_to_vec()?.as_slice()).as_ref()],
         program_id,
     );
     if &asset_address != brc20_asset_info.key {
