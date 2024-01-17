@@ -19,8 +19,8 @@ use error::Brc20OracleError;
 #[cfg(not(feature = "no-entrypoint"))]
 solana_program::entrypoint!(process_instruction);
 
-const COMMITTEE_PREFIX: [u8; 9] = *b"Committee";
-const ASSET_PREFIX: [u8; 5] = *b"Asset";
+pub const COMMITTEE_PREFIX: [u8; 9] = *b"Committee";
+pub const ASSET_PREFIX: [u8; 5] = *b"Asset";
 
 pub fn process_instruction(
     program_id: &Pubkey,
