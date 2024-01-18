@@ -1,7 +1,7 @@
 pub mod types;
 pub mod error;
 #[cfg(test)]
-mod test;
+pub mod test;
 
 use borsh::{BorshSerialize, BorshDeserialize};
 use solana_program::{account_info::AccountInfo, entrypoint::ProgramResult, msg, pubkey::Pubkey, system_instruction};
