@@ -1,0 +1,18 @@
+[package]
+name = "utils"
+authors.workspace = true
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+borsh.workspace = true
+borsh-derive.workspace = true
+ed25519-dalek.workspace = true
+solana-program.workspace = true
+solana-sdk.workspace = true
+solana-client.workspace = true
+brc20-oracle.workspace = true
+
+[dev-dependencies]
+hex.workspace = true
+solana-program-test.workspace = true
