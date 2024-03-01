@@ -142,7 +142,7 @@ pub fn request(
             )?;
             asset.serialize(&mut &mut brc20_asset_info.data.borrow_mut()[..])?;
             committee.serialize(&mut &mut committee_info.data.borrow_mut()[..])?;
-            msg!("new request for key: {:?}", key);
+            msg!("new request for uid: {}, key: {:?}", asset.uid, key);
         }
     }
     Ok(())

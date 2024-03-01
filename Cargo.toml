@@ -1,7 +1,7 @@
 [workspace.package]
 authors = ["BoolNetwork"]
 edition = "2021"
-version = "0.1.0"
+version = "0.1.1"
 
 [workspace]
 resolver = "2"

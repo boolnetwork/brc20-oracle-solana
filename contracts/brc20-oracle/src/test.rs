@@ -10,7 +10,7 @@ use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
 use solana_sdk::signers::Signers;
 use solana_sdk::transaction::Transaction;
-use crate::types::{Brc20Asset, Brc20Key, Brc20OracleInstruction, Committee};
+use crate::types::{Brc20Asset, Brc20Key, Brc20OracleInstruction, Committee, Network, BtcAddress};
 use crate::{COMMITTEE_PREFIX, ASSET_PREFIX};
 
 const PROGRAM_ID: &str = "1111111QLbz7JHiBTspS962RLKV8GndWFwiEaqKM";
@@ -161,6 +161,8 @@ pub async fn process_insert(
 async fn test_brc20_oracle() {
     let (mut banks_client, payer) = init_client().await;
     println!("payer: {:?}", payer.pubkey());
+    let network = Network::Testnet;
+    let btc_compressed_pk = hex::decode("02a9ae12a3aed9a046167a3e9e6a408d13e8b8ab4c02df55a35d7db1eb636610e6").unwrap();
     let init_committee_pair = Keypair::new();
     let new_committee_pair = Keypair::new();
 
@@ -177,7 +179,11 @@ async fn test_brc20_oracle() {
     assert_eq!(committee.address, new_committee_pair.pubkey());
 
     // query brc20 amount
-    let key = Brc20Key { height: 1, tick: [1, 2, 3, 4], owner: "12345".to_string() };
+    let key = Brc20Key {
+        height: 1,
+        tick: [1, 2, 3, 4],
+        address: BtcAddress::p2wpkh(network.to_u8(), &btc_compressed_pk).unwrap(),
+    };
     let asset_address = process_query(&mut banks_client, &payer, key.clone()).await;
     let asset: Brc20Asset = query_data(&mut banks_client, asset_address).await;
     assert_eq!(key, asset.key);

@@ -597,6 +597,7 @@ dependencies = [
  "borsh 0.10.3",
  "borsh-derive 0.10.3",
  "ed25519-dalek",
+ "hex",
  "num-derive 0.4.1",
  "num-traits",
  "solana-program",
@@ -5317,7 +5318,7 @@ checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
 
 [[package]]
 name = "utils"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "borsh 0.10.3",
  "borsh-derive 0.10.3",

@@ -69,13 +69,13 @@ pub async fn process_instruction<T: Signers>(
 pub mod call_tests {
     use solana_program_test::tokio;
     use borsh::BorshDeserialize;
+    use brc20_oracle::types::{BtcAddress, Network};
     use crate::call_process::*;
 
     #[tokio::test]
-    #[ignore]
     pub async fn test_init_committee() {
         let url = "https://api.devnet.solana.com";
-        let program_id = Pubkey::try_from("CMmMYo674EKUz52kPWmPuAfx1ZH9i4bxBQEKM6NEiZda").unwrap();
+        let program_id = Pubkey::try_from("6Z69Yzja3ZUHs6WrZxNMs823nUc3bEZDMkfjbkqUHKZY").unwrap();
         let payer_sk = [];
         let payer = Keypair::from_bytes(&payer_sk).unwrap();
         let committee_pk = hex::decode("02f48c4bda350e728d9952dc209323a7ac2f0a1ffe56f342e40c88eeb90892f7").unwrap();
@@ -85,22 +85,25 @@ pub mod call_tests {
     }
 
     #[tokio::test]
-    #[ignore]
     pub async fn test_request() {
         let url = "https://api.devnet.solana.com";
-        let program_id = Pubkey::try_from("CMmMYo674EKUz52kPWmPuAfx1ZH9i4bxBQEKM6NEiZda").unwrap();
+        let program_id = Pubkey::try_from("6Z69Yzja3ZUHs6WrZxNMs823nUc3bEZDMkfjbkqUHKZY").unwrap();
         let payer_sk = [];
         let payer = Keypair::from_bytes(&payer_sk).unwrap();
 
-        let mut tick = [0u8;4];
-        tick.copy_from_slice("ordi".as_bytes());
-        let key = Brc20Key {
-            height: 786086,
-            tick,
-            owner: "bc1qznsaq2279xkyqxteh5q8s90u9fmnkl4n8laqpas0faf8lng0j4gqgm8pm0".to_string(),
-        };
+        let btc_compressed_pk = hex::decode("02a9ae12a3aed9a046167a3e9e6a408d13e8b8ab4c02df55a35d7db1eb636610e6").unwrap();
 
-        let signature = call_request(url, CommitmentConfig::confirmed(), &program_id, &payer, &key).await.unwrap();
+        // [2575747, 2575855]
+        for height in 2575773..2575774 {
+            let key = Brc20Key {
+                height,
+                tick: *b"sats",
+                address: BtcAddress::p2wpkh(Network::Testnet.to_u8(), &btc_compressed_pk).unwrap(),
+            };
+
+            let signature = call_request(url, CommitmentConfig::confirmed(), &program_id, &payer, &key).await.unwrap();
+            println!("send height: {height}, with sig: {}", signature);
+        }
     }
 }
 
